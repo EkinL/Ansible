@@ -1,4 +1,4 @@
-document_root: "app2"
-hostname: "target"
+document_root: "temps"
+hostname: "temps"
 app_db_user: "app"
 app_db_password: "app"

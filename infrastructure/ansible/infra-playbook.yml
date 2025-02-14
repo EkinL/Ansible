@@ -1,10 +1,174 @@
-- name: "Install infra"
+---
+- name: Déployer l'application Flask avec PostgreSQL et Nginx
   hosts: all
+  become: yes
+  gather_facts: true
+  vars:
+    repo_url: "https://github.com/EkinL/TEMPS.git"
+    app_dir: "/opt/flask_app"
+    venv_path: "{{ app_dir }}/venv"
+    flask_app_port: 8000
+    db_name: "name"
+    db_user: "app_db_user"
+    db_password: "app_db_password"
+  tasks:
+    - name: Vérifier si python3 est installé
+      command: python3 --version
+      register: python3_check
+      ignore_errors: yes
+      changed_when: false
 
-  vars_files:
-    - "vars.yml"
-    #- "secrets.yml"
+    - name: Afficher la version de python3
+      debug:
+        msg: "Python3 est installé: {{ python3_check.stdout }}"
+      when: python3_check.rc == 0
 
-  roles:
-    - nginx
-    - postgres
+    - name: Installer python3 et python3-pip si python3 n'est pas installé
+      apt:
+        name:
+          - python3
+          - python3-pip
+        state: present
+      when: python3_check.rc != 0
+
+    - name: Vérifier si pip3 est installé
+      command: pip3 --version
+      register: pip3_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de pip3
+      debug:
+        msg: "pip3 est installé: {{ pip3_check.stdout }}"
+      when: pip3_check.rc == 0
+
+    - name: Installer python3-pip si pip3 n'est pas installé
+      apt:
+        name: python3-pip
+        state: present
+      when: pip3_check.rc != 0
+
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Vérifier que SQLAlchemy est installé
+      command: python3 -c "import sqlalchemy; print(sqlalchemy.__version__)"
+      register: sqlalchemy_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de SQLAlchemy si installé
+      debug:
+        msg: "SQLAlchemy est installé, version: {{ sqlalchemy_check.stdout }}"
+      when: sqlalchemy_check.rc == 0
+
+    - name: Installer SQLAlchemy si non installé
+      pip:
+        name: SQLAlchemy
+      when: sqlalchemy_check.rc != 0
+
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Vérifier que Flask est installé
+      command: python3 -c "import flask; print(flask.__version__)"
+      register: flask_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de Flask si installé
+      debug:
+        msg: "Flask est installé, version: {{ flask_check.stdout }}"
+      when: flask_check.rc == 0
+
+    - name: Installer Flask si non installé
+      pip:
+        name: Flask
+      when: flask_check.rc != 0
+
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Vérifier si PostgreSQL est installé
+      command: psql --version
+      register: psql_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de PostgreSQL si est installé
+      debug:
+        msg: "PostgreSQL est installé: {{ psql_check.stdout }}"
+      when: psql_check.rc == 0
+
+    - name: Installer PostgreSQL si non installé
+      apt:
+        name: postgresql
+        state: present
+        update_cache: yes
+      when: psql_check.rc != 0
+
+    - name: Collecter les informations sur les services
+      service_facts:
+
+    - name: Vérifier que le service PostgreSQL est en fonctionnement
+      debug:
+        msg: "Le service PostgreSQL est en fonctionnement"
+      when: "'postgresql' in ansible_facts.services and ansible_facts.services['postgresql'].state == 'running'"
+
+    - name: Démarrer et activer PostgreSQL s'il n'est pas en fonctionnement
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+      when: "'postgresql' not in ansible_facts.services or ansible_facts.services['postgresql'].state != 'running'"
+
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Vérifier si Docker est installé
+      command: docker --version
+      register: docker_version
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de Docker
+      debug:
+        msg: "Docker est installé: {{ docker_version.stdout }}"
+      when: docker_version.rc == 0
+
+    - name: Installer Docker si non installé
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+      when: docker_version.rc != 0
+
+    - name: Récupérer les informations sur les services
+      service_facts:
+
+    - name: Vérifier que le service Docker est en fonctionnement
+      debug:
+        msg: "Le service Docker est en fonctionnement."
+      when: "'docker' in ansible_facts.services and ansible_facts.services['docker'].state == 'running'"
+
+    - name: Démarrer et activer Docker si non lancé
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      when: "'docker' not in ansible_facts.services or ansible_facts.services['docker'].state != 'running'"
+
+    - name: Afficher des informations sur Docker
+      command: docker info
+      register: docker_info
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher le résultat de docker info
+      debug:
+        msg: "Docker info: {{ docker_info.stdout }}"
+      when: docker_info.rc == 0
