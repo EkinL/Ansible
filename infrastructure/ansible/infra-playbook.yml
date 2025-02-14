@@ -172,3 +172,116 @@
       debug:
         msg: "Docker info: {{ docker_info.stdout }}"
       when: docker_info.rc == 0
+
+- hosts: all
+  become: yes
+  gather_facts: true
+  tasks:
+    - name: Vérifier si Nginx est installé
+      command: nginx -v
+      register: nginx_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Afficher la version de Nginx
+      debug:
+        msg: "Nginx est installé: {{ nginx_check.stderr }}"
+      when: nginx_check.rc == 0
+
+    - name: Installer Nginx si non installé
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+      when: nginx_check.rc != 0
+
+    - name: Cloner le dépôt GitHub contenant le code
+      git:
+        repo: repo_url
+        dest: "/var/www/temps"
+        version: main
+        force: yes
+
+    - name: Créer le fichier de configuration Nginx pour l'application
+      copy:
+        dest: /etc/nginx/sites-available/temps
+        content: |
+          server {
+                  listen 80 default_server;
+                  listen [::]:80 default_server;
+
+                  root /var/www/{{ document_root }};
+
+                  # Add index.php to the list if you are using PHP
+                  index index.html index.htm index.nginx-debian.html;
+
+                  server_name {{ hostname }};
+
+                  location / {
+                          # First attempt to serve request as file, then
+                          # as directory, then fall back to displaying a 404.
+                          try_files $uri $uri/ =404;
+                  }
+
+                  # pass PHP scripts to FastCGI server
+                  #
+                  #location ~ \.php$ {
+                  #       include snippets/fastcgi-php.conf;
+                  #
+                  #       # With php-fpm (or other unix sockets):
+                          fastcgi_pass unix:/run/php/php7.4-fpm.sock;
+                  #       # With php-cgi (or other tcp sockets):
+                  #       fastcgi_pass 127.0.0.1:9000;
+                  #}
+
+                  # deny access to .htaccess files, if Apache's document root
+                  # concurs with nginx's one
+                  #
+                  #location ~ /\.ht {
+                  #       deny all;
+                  #}
+          }
+
+
+          # Virtual Host configuration for example.com
+          #
+          # You can move that to a different file under sites-available/ and symlink that
+          # to sites-enabled/ to enable it.
+          #
+          #server {
+          #       listen 80;
+          #       listen [::]:80;
+          #
+          #       server_name example.com;
+          #
+          #       root /var/www/example.com;
+          #       index index.html;
+          #
+          #       location / {
+          #               try_files $uri $uri/ =404;
+          #       }
+          #}
+      notify: Reload Nginx
+
+    - name: Activer la configuration Nginx
+      file:
+        src: /etc/nginx/sites-available/temps
+        dest: /etc/nginx/sites-enabled/temps
+        state: link
+        force: yes
+
+    - name: Récupérer les informations sur les services
+      service_facts:
+
+    - name: Démarrer et activer Nginx si ce n'est pas en cours d'exécution
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      when: "'nginx' not in ansible_facts.services or ansible_facts.services['nginx'].state != 'running'"
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
